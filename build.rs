@@ -4,10 +4,10 @@
 use std::{env, fs::File, io::Write, path::Path};
 
 /// How many components to generate.
-const NUM_DIMENSIONS: usize = 256;
+const NUM_DIMENSIONS: usize = 21201;
 
 /// What file to generate the numbers from.
-const DIRECTION_NUMBERS_TEXT: &str = include_str!("direction_numbers/new-joe-kuo-6.256.txt");
+const DIRECTION_NUMBERS_TEXT: &str = include_str!("direction_numbers/new-joe-kuo-6.21201.txt");
 
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();

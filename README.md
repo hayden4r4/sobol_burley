@@ -8,7 +8,7 @@ A seedable Owen-scrambled Sobol sequence based on the paper [Practical Hash-base
 This crate is geared towards practical graphics applications, and as such has some limitations:
 
 * The maximum sequence length is 2^16.
-* The maximum number of dimensions is 256 (although this can be worked around with seeding).
+* The maximum number of dimensions is 21201 (although this can be worked around with seeding).
 * Only `f32` output is supported.
 
 These are all trade-offs for the sake of better performance and a smaller memory footprint.

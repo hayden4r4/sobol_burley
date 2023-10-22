@@ -11,7 +11,7 @@
 //! as such has some limitations:
 //!
 //! * The maximum sequence length is 2^16.
-//! * The maximum number of dimensions is 256 (although this can be worked
+//! * The maximum number of dimensions is 21201 (although this can be worked
 //!   around with seeding).
 //! * Only `f32` output is supported.
 //!
@@ -223,7 +223,7 @@ mod tests {
     fn check_1d_and_4d_match() {
         for s in 0..4 {
             for d in 0..8 {
-                for n in 0..256 {
+                for n in 0..21201 {
                     let a1 = sample(n, d * 4, s);
                     let b1 = sample(n, d * 4 + 1, s);
                     let c1 = sample(n, d * 4 + 2, s);
