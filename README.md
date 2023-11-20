@@ -15,7 +15,6 @@ These are all trade-offs for the sake of better performance and a smaller memory
 
 Expanding this crate to be more suitable for a wider range of applications is a tentative goal for the future.
 
-
 ## Basic usage
 
 Basic usage is pretty straightforward:
@@ -36,7 +35,6 @@ The first parameter of `sample()` is the index of the sample you want, and the s
 
 If all you want is a single Owen-scrambled Sobol sequence, then this is all you need.  For more advanced usage, see the crate documentation.
 
-
 ## Why Owen-scrambled Sobol?
 
 There are other resources that explain this properly and in-depth, including Brent Burley's paper linked above.  But here's the short version just to give some intuition:
@@ -55,23 +53,20 @@ But if you use Owen-scrambled Sobol, you get this:
 
 Random points have an uneven distribution, and plain Sobol exhibits a strong structure that can result in bias and artifacts.  But Owen-scrambled Sobol in some sense gets the best of both worlds: the even distribution of Sobol, but randomized to minimize structure.
 
-
 ## Unsafe code
 
 This crate uses unsafe code for SIMD acceleration.  For 100% safe code, you can disable SIMD support via the `simd` feature flag (enabled by default).
-
 
 ## License
 
 The main code in this project is licensed under either of
 
-* MIT license (licenses/MIT.txt or http://opensource.org/licenses/MIT)
-* Apache License, Version 2.0, (licenses/APACHE-2.0.txt or http://www.apache.org/licenses/LICENSE-2.0)
+* MIT license (licenses/MIT.txt or <http://opensource.org/licenses/MIT>)
+* Apache License, Version 2.0, (licenses/APACHE-2.0.txt or <http://www.apache.org/licenses/LICENSE-2.0>)
 
 at your option.
 
 The Sobol direction numbers under `direction_numbers/` and some of the code in `build.rs` (demarcated by comments) is adapted from work by Stephen Joe and Frances Y. Kuo, and is under the 3-clause BSD license.  See `licenses/JOE_KUO.txt` for details.
-
 
 ## Contributing
 
@@ -81,7 +76,6 @@ Contributions are absolutely welcome!  Please keep in mind that this crate aims 
 * As small as it reasonably can be, including transitive dependencies.  PRs that pull in dependencies--especially deep dependency trees--are likely to be rejected unless they really pull their weight.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this project by you will be licensed as above (MIT/Apache dual-license), without any additional terms or conditions.
-
 
 [crates-io-badge]: https://img.shields.io/crates/v/sobol_burley.svg
 [crates-io-url]: https://crates.io/crates/sobol_burley
