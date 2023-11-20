@@ -10,7 +10,7 @@
 //! This crate is geared towards practical graphics applications, and
 //! as such has some limitations:
 //!
-//! * The maximum sequence length is 2^16.
+//! * The maximum sequence length is 2^32.
 //! * The maximum number of dimensions is 21201 (although this can be worked
 //!   around with seeding).
 //! * Only `f32` output is supported.
@@ -127,7 +127,7 @@ pub const NUM_DIMENSION_SETS_4D: u32 = NUM_DIMENSIONS / 4;
 /// Compute one dimension of a single sample in the Sobol sequence.
 ///
 /// `sample_index` specifies which sample in the Sobol sequence to compute.
-/// A maxmimum of 2^16 samples is supported.
+/// A maxmimum of 2^32 samples is supported.
 ///
 /// `dimension` specifies which dimension to compute.
 ///
@@ -140,12 +140,12 @@ pub const NUM_DIMENSION_SETS_4D: u32 = NUM_DIMENSIONS / 4;
 /// # Panics
 ///
 /// * Panics if `dimension` is greater than or equal to [`NUM_DIMENSIONS`].
-/// * In debug, panics if `sample_index` is greater than or equal to 2^16.
+/// * In debug, panics if `sample_index` is greater than or equal to 2^32.
 ///   In release, returns unspecified floats in the interval [0, 1).
 #[inline]
 pub fn sample(sample_index: u32, dimension: u32, seed: u32) -> f32 {
     use parts::*;
-    debug_assert!(sample_index < (1 << 16));
+    debug_assert!(sample_index < 4_294_967_295);
 
     // Shuffle the index using the given seed to produce a unique statistically
     // independent Sobol sequence.
@@ -183,12 +183,12 @@ pub fn sample(sample_index: u32, dimension: u32, seed: u32) -> f32 {
 ///
 /// * Panics if `dimension_set` is greater than or equal to
 ///   [`NUM_DIMENSION_SETS_4D`].
-/// * In debug, panics if `sample_index` is greater than or equal to 2^16.
+/// * In debug, panics if `sample_index` is greater than or equal to 2^32.
 ///   In release, returns unspecified floats in the interval [0, 1).
 #[inline]
 pub fn sample_4d(sample_index: u32, dimension_set: u32, seed: u32) -> [f32; 4] {
     use parts::*;
-    debug_assert!(sample_index < (1 << 16));
+    debug_assert!(sample_index < 4_294_967_295);
 
     // Shuffle the index using the given seed to produce a unique statistically
     // independent Sobol sequence.

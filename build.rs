@@ -84,7 +84,7 @@ fn main() {
 
 type SobolInt = u32;
 const SOBOL_BITS: usize = std::mem::size_of::<SobolInt>() * 8; // Bits per vector element.
-const SOBOL_DEPTH: usize = 16; // Number of vector elements.
+const SOBOL_DEPTH: usize = 32; // Number of vector elements.
 
 pub fn generate_direction_vectors(dimensions: usize) -> Vec<[SobolInt; SOBOL_DEPTH]> {
     let mut vectors = Vec::new();
