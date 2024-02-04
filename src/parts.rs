@@ -41,9 +41,9 @@
 //! }
 //! ```
 
-pub use crate::wide::Int4;
+pub use crate::wide_32ix256::Int8;
 
-use crate::{NUM_DIMENSIONS, NUM_DIMENSION_SETS_4D, REV_VECTORS};
+use crate::{NUM_DIMENSIONS, NUM_DIMENSION_SETS_8D, REV_VECTORS, SIMD_WIDTH};
 
 /// Compute one dimension of a single sample in the Sobol sequence.
 #[inline]
@@ -52,8 +52,8 @@ pub fn sobol_rev(sample_index_rev: u32, dimension: u32) -> u32 {
 
     // The direction vectors are organized for SIMD, so we
     // need to access them this way.
-    let dimension_set = (dimension >> 2) as usize;
-    let sub_dimension = (dimension & 0b11) as usize;
+    let dimension_set = (dimension >> 3) as usize;
+    let sub_dimension = (dimension & 0b111) as usize;
 
     // Compute the Sobol sample with reversed bits.
     let vecs = &REV_VECTORS[dimension_set];
@@ -74,20 +74,20 @@ pub fn sobol_rev(sample_index_rev: u32, dimension: u32) -> u32 {
     sobol
 }
 
-/// Same as [`sobol_rev()`] except returns four dimensions at once.
+/// Same as [`sobol_rev()`] except returns 8 dimensions at once.
 ///
-/// **Note:** `dimension_set` indexes into sets of four dimensions:
+/// **Note:** `dimension_set` indexes into sets of 8 dimensions:
 ///
-/// * `0` -> `[dim0, dim1, dim2, dim3]`
-/// * `1` -> `[dim4, dim5, dim6, dim7]`
+/// * `0` -> `[dim0, dim1, dim2, dim3, dim4, dim5, dim6, dim7]`
+/// * `1` -> `[dim8, dim9, dim10, dim11, dim12, dim13, dim14, dim15]`
 /// * etc.
 #[inline]
-pub fn sobol_int4_rev(sample_index_rev: u32, dimension_set: u32) -> Int4 {
-    assert!(dimension_set < NUM_DIMENSION_SETS_4D);
+pub fn sobol_int8_rev(sample_index_rev: u32, dimension_set: u32) -> Int8 {
+    assert!(dimension_set < NUM_DIMENSION_SETS_8D);
 
     // Compute the Sobol sample with reversed bits.
     let vecs = &REV_VECTORS[dimension_set as usize];
-    let mut sobol = Int4::zero();
+    let mut sobol = Int8::zero();
     let mut index = sample_index_rev;
     let mut i = 0;
     while index != 0 {
@@ -131,17 +131,17 @@ pub fn owen_scramble_rev(mut n_rev: u32, scramble: u32) -> u32 {
     n_rev
 }
 
-/// Same as [`owen_scramble_rev()`], except on 4 integers at a time.
+/// Same as [`owen_scramble_rev()`], except on 8 integers at a time.
 ///
 /// You can (and probably should) put a different random scramble value
 /// in each lane of `scramble` to scramble each lane differently.
 #[inline(always)]
-pub fn owen_scramble_int4_rev(mut n_rev: Int4, scramble: Int4) -> Int4 {
-    n_rev ^= n_rev * [0x3d20adea; 4].into();
+pub fn owen_scramble_int8_rev(mut n_rev: Int8, scramble: Int8) -> Int8 {
+    n_rev ^= n_rev * [0x3d20adea; SIMD_WIDTH].into();
     n_rev += scramble;
-    n_rev *= (scramble >> 16) | [1; 4].into();
-    n_rev ^= n_rev * [0x05526c56; 4].into();
-    n_rev ^= n_rev * [0x53a22864; 4].into();
+    n_rev *= (scramble >> 16) | [1; SIMD_WIDTH].into();
+    n_rev ^= n_rev * [0x05526c56; SIMD_WIDTH].into();
+    n_rev ^= n_rev * [0x53a22864; SIMD_WIDTH].into();
 
     n_rev
 }
@@ -162,15 +162,15 @@ pub fn hash(mut n: u32) -> u32 {
     n
 }
 
-/// Same as [`hash_u32()`] except on four numbers at once.
+/// Same as [`hash_u32()`] except on 8 numbers at once.
 #[inline(always)]
-pub fn hash_int4(mut n: Int4) -> Int4 {
-    n ^= [0xe6fe3beb; 4].into(); // So zero doesn't map to zero.
+pub fn hash_int8(mut n: Int8) -> Int8 {
+    n ^= [0xe6fe3beb; SIMD_WIDTH].into(); // So zero doesn't map to zero.
 
     n ^= n >> 16;
-    n *= [0x7feb352d; 4].into();
+    n *= [0x7feb352d; SIMD_WIDTH].into();
     n ^= n >> 15;
-    n *= [0x846ca68b; 4].into();
+    n *= [0x846ca68b; SIMD_WIDTH].into();
     n ^= n >> 16;
 
     n

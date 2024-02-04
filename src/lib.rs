@@ -7,8 +7,7 @@
 //! and more dimensions due to
 //! [Kuo et al.](http://web.maths.unsw.edu.au/~fkuo/sobol/)
 //!
-//! This crate is geared towards practical graphics applications, and
-//! as such has some limitations:
+//! The below restrictions apply:
 //!
 //! * The maximum sequence length is 2^32.
 //! * The maximum number of dimensions is 21201 (although this can be worked
@@ -66,15 +65,15 @@
 //! # use sobol_burley::sample;
 //! // Print 10000 dimensions of a single sample.
 //! for dimension in 0..10000 {
-//!     let seed = dimension / 4;
-//!     let n = sample(0, dimension % 4, seed);
+//!     let seed = dimension / 8;
+//!     let n = sample(0, dimension % 8, seed);
 //!     println!("{}", n);
 //! }
 //!```
 //!
-//! In this example we change seeds every 4 dimensions.  This allows us to
-//! re-use the same 4 dimensions over and over, extending the sequence to as
-//! many dimensions as we like.  Each set of 4 dimensions is stratified within
+//! In this example we change seeds every 8 dimensions.  This allows us to
+//! re-use the same 8 dimensions over and over, extending the sequence to as
+//! many dimensions as we like.  Each set of 8 dimensions is stratified within
 //! itself, but is randomly decorrelated from the other sets.
 //!
 //! See Burley's paper for justification of this padding approach as well as
@@ -83,25 +82,29 @@
 //!
 //! # SIMD
 //!
-//! You can use `sample_4d()` to compute four dimensions at once, returned as
+//! You can use `sample_8d()` to compute 8 dimensions at once, returned as
 //! an array of floats.
 //!
-//! On x86-64 architectures `sample_4d()` utilizes SIMD for a roughly 4x
+//! On x86-64 architectures `sample_8d()` utilizes SIMD for a roughly 8x
 //! speed-up.  On other architectures it still computes correct results, but
 //! SIMD isn't supported yet.
 //!
-//! Importantly, `sample()` and `sample_4d()` always compute identical results:
+//! Importantly, `sample()` and `sample_8d()` always compute identical results:
 //!
 //! ```rust
-//! # use sobol_burley::{sample, sample_4d};
+//! # use sobol_burley::{sample, sample_8d};
 //! for dimension_set in 0..10 {
 //!     let a = [
 //!         sample(0, dimension_set * 4, 0),
 //!         sample(0, dimension_set * 4 + 1, 0),
 //!         sample(0, dimension_set * 4 + 2, 0),
-//!         sample(0, dimension_set * 4 + 3, 0)
+//!         sample(0, dimension_set * 4 + 3, 0),
+//!         sample(0, dimension_set * 4 + 4, 0),
+//!         sample(0, dimension_set * 4 + 5, 0),
+//!         sample(0, dimension_set * 4 + 6, 0),
+//!         sample(0, dimension_set * 4 + 7, 0)
 //!     ];
-//!     let b = sample_4d(0, dimension_set, 0);
+//!     let b = sample_8d(0, dimension_set, 0);
 //!
 //!     assert_eq!(a, b);
 //! }
@@ -112,8 +115,11 @@
 #![no_std]
 #![allow(clippy::unreadable_literal)]
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 pub mod parts;
-mod wide;
+mod wide_32ix256;
 
 // This `include` provides `NUM_DIMENSIONS` and `REV_VECTORS`.
 // See the build.rs file for how this included file is generated.
@@ -121,8 +127,8 @@ include!(concat!(env!("OUT_DIR"), "/vectors.inc"));
 
 /// The number of available 4d dimension sets.
 ///
-/// This is just `NUM_DIMENSIONS / 4`, for convenience.
-pub const NUM_DIMENSION_SETS_4D: u32 = NUM_DIMENSIONS / 4;
+/// This is just `NUM_DIMENSIONS / SIMD_WIDTH`, for convenience.
+pub const NUM_DIMENSION_SETS_8D: u32 = NUM_DIMENSIONS / SIMD_WIDTH as u32;
 
 /// Compute one dimension of a single sample in the Sobol sequence.
 ///
@@ -160,8 +166,14 @@ pub fn sample(sample_index: u32, dimension: u32, seed: u32) -> f32 {
     // seed.
     let scramble = {
         let seed = seed.wrapping_mul(0x9c8f2d3b);
-        let ds = dimension >> 2;
-        ds ^ seed ^ [0x912f69ba, 0x174f18ab, 0x691e72ca, 0xb40cc1b8][dimension as usize & 0b11]
+        let ds = dimension >> 3;
+        // These should probably be different for each channel, but I just duplicate
+        // the existing 4D ones as the difference is almost certainly negligible
+        ds ^ seed
+            ^ [
+                0x912f69ba, 0x174f18ab, 0x691e72ca, 0xb40cc1b8, 0x912f69ba, 0x174f18ab, 0x691e72ca,
+                0xb40cc1b8,
+            ][dimension as usize & 0b111]
     };
 
     let sobol_owen_rev = owen_scramble_rev(sobol, hash(scramble));
@@ -169,24 +181,24 @@ pub fn sample(sample_index: u32, dimension: u32, seed: u32) -> f32 {
     u32_to_f32_norm(sobol_owen_rev.reverse_bits())
 }
 
-/// Compute four dimensions of a single sample in the Sobol sequence.
+/// Compute 8 dimensions of a single sample in the Sobol sequence.
 ///
-/// This is identical to [`sample()`], but computes four dimensions at once.
-/// On x86-64 architectures it utilizes SIMD for a roughly 4x speed-up.
+/// This is identical to [`sample()`], but computes 8 dimensions at once.
+/// On x86-64 architectures it utilizes SIMD for a roughly 8x speed-up.
 /// On other architectures it still computes correct results, but doesn't
 /// utilize SIMD.
 ///
-/// `dimension_set` specifies which four dimensions to compute. `0` yields the
-/// first four dimensions, `1` the second four dimensions, and so on.
+/// `dimension_set` specifies which 8 dimensions to compute. `0` yields the
+/// first 8 dimensions, `1` the second 8 dimensions, and so on.
 ///
 /// # Panics
 ///
 /// * Panics if `dimension_set` is greater than or equal to
-///   [`NUM_DIMENSION_SETS_4D`].
+///   [`NUM_DIMENSION_SETS_8D`].
 /// * In debug, panics if `sample_index` is greater than or equal to 2^32.
 ///   In release, returns unspecified floats in the interval [0, 1).
 #[inline]
-pub fn sample_4d(sample_index: u32, dimension_set: u32, seed: u32) -> [f32; 4] {
+pub fn sample_8d(sample_index: u32, dimension_set: u32, seed: u32) -> [f32; SIMD_WIDTH] {
     use parts::*;
     debug_assert!(sample_index < 4_294_967_295);
 
@@ -195,19 +207,27 @@ pub fn sample_4d(sample_index: u32, dimension_set: u32, seed: u32) -> [f32; 4] {
     let shuffled_rev_index =
         owen_scramble_rev(sample_index.reverse_bits(), hash(seed ^ 0x79c68e4a));
 
-    let sobol = sobol_int4_rev(shuffled_rev_index, dimension_set);
+    let sobol = sobol_int8_rev(shuffled_rev_index, dimension_set);
 
     // Compute the scramble values for doing Owen scrambling.
     // The multiply on `seed` is to avoid accidental cancellation
     // with `dimension` on an incrementing or otherwise structured
     // seed.
     let scramble = {
-        let seed: Int4 = [seed.wrapping_mul(0x9c8f2d3b); 4].into();
-        let ds: Int4 = [dimension_set; 4].into();
-        seed ^ ds ^ [0x912f69ba, 0x174f18ab, 0x691e72ca, 0xb40cc1b8].into()
+        let seed: Int8 = [seed.wrapping_mul(0x9c8f2d3b); SIMD_WIDTH].into();
+        let ds: Int8 = [dimension_set; SIMD_WIDTH].into();
+        // These random values should probably be different for each channel,
+        // but I just duplicate the existing 4D ones as the difference is almost certainly
+        // negligible
+        seed ^ ds
+            ^ [
+                0x912f69ba, 0x174f18ab, 0x691e72ca, 0xb40cc1b8, 0x912f69ba, 0x174f18ab, 0x691e72ca,
+                0xb40cc1b8,
+            ]
+            .into()
     };
 
-    let sobol_owen_rev = owen_scramble_int4_rev(sobol, hash_int4(scramble));
+    let sobol_owen_rev = owen_scramble_int8_rev(sobol, hash_int8(scramble));
 
     // Un-reverse the bits and convert to floating point in [0, 1).
     sobol_owen_rev.reverse_bits().to_f32_norm()
@@ -220,21 +240,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn check_1d_and_4d_match() {
+    fn check_1d_and_8d_match() {
         for s in 0..4 {
-            for d in 0..8 {
+            for d in 0..SIMD_WIDTH as u32 {
                 for n in 0..21201 {
-                    let a1 = sample(n, d * 4, s);
-                    let b1 = sample(n, d * 4 + 1, s);
-                    let c1 = sample(n, d * 4 + 2, s);
-                    let d1 = sample(n, d * 4 + 3, s);
+                    let a1 = sample(n, d * SIMD_WIDTH as u32, s);
+                    let b1 = sample(n, d * SIMD_WIDTH as u32 + 1, s);
+                    let c1 = sample(n, d * SIMD_WIDTH as u32 + 2, s);
+                    let d1 = sample(n, d * SIMD_WIDTH as u32 + 3, s);
+                    let e1 = sample(n, d * SIMD_WIDTH as u32 + 4, s);
+                    let f1 = sample(n, d * SIMD_WIDTH as u32 + 5, s);
+                    let g1 = sample(n, d * SIMD_WIDTH as u32 + 6, s);
+                    let h1 = sample(n, d * SIMD_WIDTH as u32 + 7, s);
 
-                    let [a2, b2, c2, d2] = sample_4d(n, d, s);
+                    let [a2, b2, c2, d2, e2, f2, g2, h2] = sample_8d(n, d, s);
 
                     assert_eq!(a1, a2);
                     assert_eq!(b1, b2);
                     assert_eq!(c1, c2);
                     assert_eq!(d1, d2);
+                    assert_eq!(e1, e2);
+                    assert_eq!(f1, f2);
+                    assert_eq!(g1, g2);
+                    assert_eq!(h1, h2);
                 }
             }
         }

@@ -1,10 +1,13 @@
 //! This file generates the Sobol direction vectors used by this crate's
 //! Sobol sequence.
 
+use itertools::izip;
 use std::{env, fs::File, io::Write, path::Path};
 
 /// How many components to generate.
 const NUM_DIMENSIONS: usize = 21201;
+/// How many dimensions to generate at once when using SIMD.
+const SIMD_WIDTH: usize = 8;
 
 /// What file to generate the numbers from.
 const DIRECTION_NUMBERS_TEXT: &str = include_str!("direction_numbers/new-joe-kuo-6.21201.txt");
@@ -27,33 +30,47 @@ fn main() {
     )
     .unwrap();
 
+    // Write SIMD width.
+    f.write_all(
+        format!(
+            "/// The number of dimensions to generate at once when using SIMD.\npub const SIMD_WIDTH: usize = {};\n\n",
+            SIMD_WIDTH
+        )
+        .as_bytes(),
+    ).unwrap();
+
     // Write the vectors.
     // We write them in a rather atypical way because of how the library
-    // uses them.  First, we interleave the numbers of each set of four
+    // uses them.  First, we interleave the numbers of each set of 8
     // dimensions, for SIMD evaluation.  Second, each number is written
     // with reversed bits, to avoid needing to reverse them before scrambling.
     f.write_all(
         format!(
-            "const REV_VECTORS: &[[[u{0}; 4]; {1}]] = &[\n",
+            "const REV_VECTORS: &[[[u{0}; 8]; {1}]] = &[\n",
             SOBOL_BITS, SOBOL_DEPTH
         )
         .as_bytes(),
     )
     .unwrap();
-    for d4 in vectors.chunks_exact(4) {
+    for d4 in vectors.chunks_exact(SIMD_WIDTH) {
         f.write_all("  [\n".as_bytes()).unwrap();
-        for ((a, b), (c, d)) in d4[0]
-            .iter()
-            .zip(d4[1].iter())
-            .zip(d4[2].iter().zip(d4[3].iter()))
-        {
+        for ((a, b), (c, d), (e, f1), (g, h)) in izip!(
+            d4[0].iter().zip(d4[1].iter()),
+            d4[2].iter().zip(d4[3].iter()),
+            d4[4].iter().zip(d4[5].iter()),
+            d4[6].iter().zip(d4[7].iter())
+        ) {
             f.write_all(
-                format!(
-                    "    [0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}],\n",
-                    a.reverse_bits(),
-                    b.reverse_bits(),
-                    c.reverse_bits(),
-                    d.reverse_bits()
+            format!(
+                "    [0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}],\n",
+                a.reverse_bits(),
+                b.reverse_bits(),
+                c.reverse_bits(),
+                d.reverse_bits(),
+                e.reverse_bits(),
+                f1.reverse_bits(),
+                g.reverse_bits(),
+                h.reverse_bits(),
                 )
                 .as_bytes(),
             )

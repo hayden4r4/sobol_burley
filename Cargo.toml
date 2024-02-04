@@ -1,13 +1,22 @@
 [package]
 name = "sobol_burley"
-version = "0.6.0"
+version = "0.7.0"
 description = "A seedable Owen-scrambled Sobol sequence."
 categories = ["algorithms", "mathematics", "no-std"]
-keywords = ["sobol", "low-discrepancy", "monte-carlo", "quasirandom", "sampling"]
+keywords = [
+    "sobol",
+    "low-discrepancy",
+    "monte-carlo",
+    "quasirandom",
+    "sampling",
+]
 documentation = "https://docs.rs/sobol_burley"
 repository = "https://github.com/hayden4r4/sobol_burley"
 readme = "README.md"
-authors = ["Hayden Rose <hayden4r4@gmail.com>", "Nathan Vegdahl <cessen@cessen.com>"]
+authors = [
+    "Hayden Rose <hayden4r4@gmail.com>",
+    "Nathan Vegdahl <cessen@cessen.com>",
+]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 build = "build.rs"
@@ -21,9 +30,19 @@ path = "src/lib.rs"
 default = ["simd"]
 simd = []
 
+[dependencies]
+mimalloc = { version = "0.1", default-features = false }
+
 [dev-dependencies]
 rand = "0.8"
 bencher = "0.1.5"
+
+[build-dependencies]
+itertools = "0.12"
+
+[profile.release]
+lto = "fat"
+codegen-unit=1
 
 [[bench]]
 name = "bench"
