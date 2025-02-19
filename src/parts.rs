@@ -43,7 +43,7 @@
 
 pub use crate::wide_32ix256::Int8;
 
-use crate::{NUM_DIMENSIONS, NUM_DIMENSION_SETS_8D, REV_VECTORS, SIMD_WIDTH};
+use crate::{NUM_DIMENSIONS, NUM_DIMENSION_SETS_8D, REV_VECTORS, SOBOL_WIDTH};
 
 /// Compute one dimension of a single sample in the Sobol sequence.
 #[inline]
@@ -137,11 +137,11 @@ pub fn owen_scramble_rev(mut n_rev: u32, scramble: u32) -> u32 {
 /// in each lane of `scramble` to scramble each lane differently.
 #[inline(always)]
 pub fn owen_scramble_int8_rev(mut n_rev: Int8, scramble: Int8) -> Int8 {
-    n_rev ^= n_rev * [0x3d20adea; SIMD_WIDTH].into();
+    n_rev ^= n_rev * [0x3d20adea; SOBOL_WIDTH].into();
     n_rev += scramble;
-    n_rev *= (scramble >> 16) | [1; SIMD_WIDTH].into();
-    n_rev ^= n_rev * [0x05526c56; SIMD_WIDTH].into();
-    n_rev ^= n_rev * [0x53a22864; SIMD_WIDTH].into();
+    n_rev *= (scramble >> 16) | [1; SOBOL_WIDTH].into();
+    n_rev ^= n_rev * [0x05526c56; SOBOL_WIDTH].into();
+    n_rev ^= n_rev * [0x53a22864; SOBOL_WIDTH].into();
 
     n_rev
 }
@@ -165,12 +165,12 @@ pub fn hash(mut n: u32) -> u32 {
 /// Same as [`hash_u32()`] except on 8 numbers at once.
 #[inline(always)]
 pub fn hash_int8(mut n: Int8) -> Int8 {
-    n ^= [0xe6fe3beb; SIMD_WIDTH].into(); // So zero doesn't map to zero.
+    n ^= [0xe6fe3beb; SOBOL_WIDTH].into(); // So zero doesn't map to zero.
 
     n ^= n >> 16;
-    n *= [0x7feb352d; SIMD_WIDTH].into();
+    n *= [0x7feb352d; SOBOL_WIDTH].into();
     n ^= n >> 15;
-    n *= [0x846ca68b; SIMD_WIDTH].into();
+    n *= [0x846ca68b; SOBOL_WIDTH].into();
     n ^= n >> 16;
 
     n

@@ -1,15 +1,14 @@
-//! This file generates the Sobol direction vectors used by this crate's
+//! This f generates the Sobol direction vectors used by this crate's
 //! Sobol sequence.
 
-use itertools::izip;
 use std::{env, fs::File, io::Write, path::Path};
 
 /// How many components to generate.
 const NUM_DIMENSIONS: usize = 21201;
 /// How many dimensions to generate at once when using SIMD.
-const SIMD_WIDTH: usize = 8;
+const SOBOL_WIDTH: usize = 8;
 
-/// What file to generate the numbers from.
+/// What f to generate the numbers from.
 const DIRECTION_NUMBERS_TEXT: &str = include_str!("direction_numbers/new-joe-kuo-6.21201.txt");
 
 fn main() {
@@ -33,8 +32,8 @@ fn main() {
     // Write SIMD width.
     f.write_all(
         format!(
-            "/// The number of dimensions to generate at once when using SIMD.\npub const SIMD_WIDTH: usize = {};\n\n",
-            SIMD_WIDTH
+            "/// The number of dimensions to generate at once when using SIMD.\npub const SOBOL_WIDTH: usize = {};\n\n",
+            SOBOL_WIDTH
         )
         .as_bytes(),
     ).unwrap();
@@ -46,35 +45,24 @@ fn main() {
     // with reversed bits, to avoid needing to reverse them before scrambling.
     f.write_all(
         format!(
-            "const REV_VECTORS: &[[[u{0}; 8]; {1}]] = &[\n",
-            SOBOL_BITS, SOBOL_DEPTH
+            "const REV_VECTORS: &[[[u{SOBOL_BITS}; {SOBOL_WIDTH}]; {SOBOL_DEPTH}]] = &[\n",
         )
         .as_bytes(),
     )
     .unwrap();
-    for d4 in vectors.chunks_exact(SIMD_WIDTH) {
+    for d4 in vectors.chunks_exact(SOBOL_WIDTH) {
         f.write_all("  [\n".as_bytes()).unwrap();
-        for ((a, b), (c, d), (e, f1), (g, h)) in izip!(
-            d4[0].iter().zip(d4[1].iter()),
-            d4[2].iter().zip(d4[3].iter()),
-            d4[4].iter().zip(d4[5].iter()),
-            d4[6].iter().zip(d4[7].iter())
-        ) {
-            f.write_all(
-            format!(
-                "    [0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}],\n",
-                a.reverse_bits(),
-                b.reverse_bits(),
-                c.reverse_bits(),
-                d.reverse_bits(),
-                e.reverse_bits(),
-                f1.reverse_bits(),
-                g.reverse_bits(),
-                h.reverse_bits(),
-                )
-                .as_bytes(),
-            )
-            .unwrap();
+        for i in 0..SOBOL_DEPTH {
+            f.write_all("    [".as_bytes()).unwrap();
+            for j in 0..SOBOL_WIDTH {
+                let value = d4[j][i].reverse_bits();
+                if j < SOBOL_WIDTH - 1 {
+                    f.write_all(format!("0x{:08x}, ", value).as_bytes()).unwrap();
+                } else {
+                    f.write_all(format!("0x{:08x}", value).as_bytes()).unwrap();
+                }
+            }
+            f.write_all("],\n".as_bytes()).unwrap();
         }
         f.write_all("  ],\n".as_bytes()).unwrap();
     }
@@ -119,7 +107,7 @@ pub fn generate_direction_vectors(dimensions: usize) -> Vec<[SobolInt; SOBOL_DEP
         let mut v = [0 as SobolInt; SOBOL_DEPTH];
 
         // Get data from the next valid line from the direction numbers text
-        // file.
+        // f.
         let (s, a, m) = loop {
             if let Ok((a, m)) = parse_direction_numbers(
                 lines
@@ -151,7 +139,7 @@ pub fn generate_direction_vectors(dimensions: usize) -> Vec<[SobolInt; SOBOL_DEP
 }
 
 /// Parses the direction numbers from a single line of the direction numbers
-/// text file.  Returns the `a` and `m` parts.
+/// text f.  Returns the `a` and `m` parts.
 fn parse_direction_numbers(text: &str) -> Result<(u32, Vec<u32>), Box<dyn std::error::Error>> {
     let mut numbers = text.split_whitespace();
     if numbers.clone().count() < 4 || text.starts_with("#") {

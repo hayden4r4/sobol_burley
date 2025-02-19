@@ -95,14 +95,14 @@
 //! # use sobol_burley::{sample, sample_8d};
 //! for dimension_set in 0..10 {
 //!     let a = [
-//!         sample(0, dimension_set * 4, 0),
-//!         sample(0, dimension_set * 4 + 1, 0),
-//!         sample(0, dimension_set * 4 + 2, 0),
-//!         sample(0, dimension_set * 4 + 3, 0),
-//!         sample(0, dimension_set * 4 + 4, 0),
-//!         sample(0, dimension_set * 4 + 5, 0),
-//!         sample(0, dimension_set * 4 + 6, 0),
-//!         sample(0, dimension_set * 4 + 7, 0)
+//!         sample(0, dimension_set * 8, 0),
+//!         sample(0, dimension_set * 8 + 1, 0),
+//!         sample(0, dimension_set * 8 + 2, 0),
+//!         sample(0, dimension_set * 8 + 3, 0),
+//!         sample(0, dimension_set * 8 + 4, 0),
+//!         sample(0, dimension_set * 8 + 5, 0),
+//!         sample(0, dimension_set * 8 + 6, 0),
+//!         sample(0, dimension_set * 8 + 7, 0)
 //!     ];
 //!     let b = sample_8d(0, dimension_set, 0);
 //!
@@ -127,8 +127,8 @@ include!(concat!(env!("OUT_DIR"), "/vectors.inc"));
 
 /// The number of available 4d dimension sets.
 ///
-/// This is just `NUM_DIMENSIONS / SIMD_WIDTH`, for convenience.
-pub const NUM_DIMENSION_SETS_8D: u32 = NUM_DIMENSIONS / SIMD_WIDTH as u32;
+/// This is just `NUM_DIMENSIONS / SOBOL_WIDTH`, for convenience.
+pub const NUM_DIMENSION_SETS_8D: u32 = NUM_DIMENSIONS / SOBOL_WIDTH as u32;
 
 /// Compute one dimension of a single sample in the Sobol sequence.
 ///
@@ -198,7 +198,7 @@ pub fn sample(sample_index: u32, dimension: u32, seed: u32) -> f32 {
 /// * In debug, panics if `sample_index` is greater than or equal to 2^32.
 ///   In release, returns unspecified floats in the interval [0, 1).
 #[inline]
-pub fn sample_8d(sample_index: u32, dimension_set: u32, seed: u32) -> [f32; SIMD_WIDTH] {
+pub fn sample_8d(sample_index: u32, dimension_set: u32, seed: u32) -> [f32; SOBOL_WIDTH] {
     use parts::*;
     debug_assert!(sample_index < 4_294_967_295);
 
@@ -214,8 +214,8 @@ pub fn sample_8d(sample_index: u32, dimension_set: u32, seed: u32) -> [f32; SIMD
     // with `dimension` on an incrementing or otherwise structured
     // seed.
     let scramble = {
-        let seed: Int8 = [seed.wrapping_mul(0x9c8f2d3b); SIMD_WIDTH].into();
-        let ds: Int8 = [dimension_set; SIMD_WIDTH].into();
+        let seed: Int8 = [seed.wrapping_mul(0x9c8f2d3b); SOBOL_WIDTH].into();
+        let ds: Int8 = [dimension_set; SOBOL_WIDTH].into();
         // These random values should probably be different for each channel,
         // but I just duplicate the existing 4D ones as the difference is almost certainly
         // negligible
@@ -242,16 +242,16 @@ mod tests {
     #[test]
     fn check_1d_and_8d_match() {
         for s in 0..4 {
-            for d in 0..SIMD_WIDTH as u32 {
+            for d in 0..SOBOL_WIDTH as u32 {
                 for n in 0..21201 {
-                    let a1 = sample(n, d * SIMD_WIDTH as u32, s);
-                    let b1 = sample(n, d * SIMD_WIDTH as u32 + 1, s);
-                    let c1 = sample(n, d * SIMD_WIDTH as u32 + 2, s);
-                    let d1 = sample(n, d * SIMD_WIDTH as u32 + 3, s);
-                    let e1 = sample(n, d * SIMD_WIDTH as u32 + 4, s);
-                    let f1 = sample(n, d * SIMD_WIDTH as u32 + 5, s);
-                    let g1 = sample(n, d * SIMD_WIDTH as u32 + 6, s);
-                    let h1 = sample(n, d * SIMD_WIDTH as u32 + 7, s);
+                    let a1 = sample(n, d * SOBOL_WIDTH as u32, s);
+                    let b1 = sample(n, d * SOBOL_WIDTH as u32 + 1, s);
+                    let c1 = sample(n, d * SOBOL_WIDTH as u32 + 2, s);
+                    let d1 = sample(n, d * SOBOL_WIDTH as u32 + 3, s);
+                    let e1 = sample(n, d * SOBOL_WIDTH as u32 + 4, s);
+                    let f1 = sample(n, d * SOBOL_WIDTH as u32 + 5, s);
+                    let g1 = sample(n, d * SOBOL_WIDTH as u32 + 6, s);
+                    let h1 = sample(n, d * SOBOL_WIDTH as u32 + 7, s);
 
                     let [a2, b2, c2, d2, e2, f2, g2, h2] = sample_8d(n, d, s);
 
