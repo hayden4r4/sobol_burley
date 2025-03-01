@@ -41,9 +41,9 @@
 //! }
 //! ```
 
-pub use crate::wide_32ix256::Int8;
+pub use crate::wide_32ix256::PackedInt;
 
-use crate::{NUM_DIMENSIONS, NUM_DIMENSION_SETS_8D, REV_VECTORS, SOBOL_WIDTH};
+use crate::{NUM_DIMENSIONS, NUM_DIMENSION_SETS_SIMD, REV_VECTORS, SOBOL_WIDTH};
 
 /// Compute one dimension of a single sample in the Sobol sequence.
 #[inline]
@@ -74,20 +74,20 @@ pub fn sobol_rev(sample_index_rev: u32, dimension: u32) -> u32 {
     sobol
 }
 
-/// Same as [`sobol_rev()`] except returns 8 dimensions at once.
+/// Same as [`sobol_rev()`] except returns SOBOL_WIDTH dimensions at once.
 ///
-/// **Note:** `dimension_set` indexes into sets of 8 dimensions:
-///
+/// **Note:** `dimension_set` indexes into sets of SOBOL_WIDTH dimensions:
+/// i.e. with SOBOL_WIDTH = 8:
 /// * `0` -> `[dim0, dim1, dim2, dim3, dim4, dim5, dim6, dim7]`
 /// * `1` -> `[dim8, dim9, dim10, dim11, dim12, dim13, dim14, dim15]`
 /// * etc.
 #[inline]
-pub fn sobol_int8_rev(sample_index_rev: u32, dimension_set: u32) -> Int8 {
-    assert!(dimension_set < NUM_DIMENSION_SETS_8D);
+pub fn sobol_simd_rev(sample_index_rev: u32, dimension_set: u32) -> PackedInt {
+    assert!(dimension_set < NUM_DIMENSION_SETS_SIMD);
 
     // Compute the Sobol sample with reversed bits.
     let vecs = &REV_VECTORS[dimension_set as usize];
-    let mut sobol = Int8::zero();
+    let mut sobol = PackedInt::zero();
     let mut index = sample_index_rev;
     let mut i = 0;
     while index != 0 {
@@ -131,12 +131,12 @@ pub fn owen_scramble_rev(mut n_rev: u32, scramble: u32) -> u32 {
     n_rev
 }
 
-/// Same as [`owen_scramble_rev()`], except on 8 integers at a time.
+/// Same as [`owen_scramble_rev()`], except on SOBOL_WIDTH integers at a time.
 ///
 /// You can (and probably should) put a different random scramble value
 /// in each lane of `scramble` to scramble each lane differently.
 #[inline(always)]
-pub fn owen_scramble_int8_rev(mut n_rev: Int8, scramble: Int8) -> Int8 {
+pub fn owen_scramble_simd_rev(mut n_rev: PackedInt, scramble: PackedInt) -> PackedInt {
     n_rev ^= n_rev * [0x3d20adea; SOBOL_WIDTH].into();
     n_rev += scramble;
     n_rev *= (scramble >> 16) | [1; SOBOL_WIDTH].into();
@@ -162,9 +162,9 @@ pub fn hash(mut n: u32) -> u32 {
     n
 }
 
-/// Same as [`hash_u32()`] except on 8 numbers at once.
+/// Same as [`hash_u32()`] except on SOBOL_WIDTH numbers at once.
 #[inline(always)]
-pub fn hash_int8(mut n: Int8) -> Int8 {
+pub fn hash_simd(mut n: PackedInt) -> PackedInt {
     n ^= [0xe6fe3beb; SOBOL_WIDTH].into(); // So zero doesn't map to zero.
 
     n ^= n >> 16;

@@ -5,8 +5,12 @@ use std::{env, fs::File, io::Write, path::Path};
 
 /// How many components to generate.
 const NUM_DIMENSIONS: usize = 21201;
+
 /// How many dimensions to generate at once when using SIMD.
-const SOBOL_WIDTH: usize = 8;
+#[cfg(all(target_arch = "aarch64", feature = "simd"))]
+pub const SOBOL_WIDTH: usize = 4;
+#[cfg(all(target_arch = "x86_64", feature = "simd"))]
+pub const SOBOL_WIDTH: usize = 4;
 
 /// What f to generate the numbers from.
 const DIRECTION_NUMBERS_TEXT: &str = include_str!("direction_numbers/new-joe-kuo-6.21201.txt");
