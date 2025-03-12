@@ -10,7 +10,7 @@ const NUM_DIMENSIONS: usize = 21201;
 #[cfg(all(target_arch = "aarch64", feature = "simd"))]
 pub const SOBOL_WIDTH: usize = 4;
 #[cfg(all(target_arch = "x86_64", feature = "simd"))]
-pub const SOBOL_WIDTH: usize = 4;
+pub const SOBOL_WIDTH: usize = 8;
 
 /// What f to generate the numbers from.
 const DIRECTION_NUMBERS_TEXT: &str = include_str!("direction_numbers/new-joe-kuo-6.21201.txt");
