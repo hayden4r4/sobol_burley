@@ -41,14 +41,16 @@
 //! }
 //! ```
 
-pub use crate::wide_32ix256::Int8;
+use crate::{LaneBlock, NUM_DIMENSIONS, NUM_DIMENSION_SETS, REV_VECTORS, SIMD_WIDTH};
 
-use crate::{NUM_DIMENSIONS, NUM_DIMENSION_SETS_8D, REV_VECTORS, SIMD_WIDTH};
+pub type Int8 = LaneBlock<SIMD_WIDTH>;
 
 /// Compute one dimension of a single sample in the Sobol sequence.
 #[inline]
 pub fn sobol_rev(sample_index_rev: u32, dimension: u32) -> u32 {
-    assert!(dimension < NUM_DIMENSIONS);
+    if dimension >= NUM_DIMENSIONS {
+        return 0;
+    }
 
     // The direction vectors are organized for SIMD, so we
     // need to access them this way.
@@ -74,16 +76,18 @@ pub fn sobol_rev(sample_index_rev: u32, dimension: u32) -> u32 {
     sobol
 }
 
-/// Same as [`sobol_rev()`] except returns 8 dimensions at once.
+/// Same as [`sobol_rev()`] except returns [`SIMD_WIDTH`] dimensions at once.
 ///
-/// **Note:** `dimension_set` indexes into sets of 8 dimensions:
+/// **Note:** `dimension_set` indexes into sets of [`SIMD_WIDTH`] dimensions:
 ///
-/// * `0` -> `[dim0, dim1, dim2, dim3, dim4, dim5, dim6, dim7]`
-/// * `1` -> `[dim8, dim9, dim10, dim11, dim12, dim13, dim14, dim15]`
+/// * `0` -> `[dim0, dim1, ..., dim(SIMD_WIDTH-1)]`
+/// * `1` -> `[dimSIMD_WIDTH, dimSIMD_WIDTH+1, ...]`
 /// * etc.
 #[inline]
 pub fn sobol_int8_rev(sample_index_rev: u32, dimension_set: u32) -> Int8 {
-    assert!(dimension_set < NUM_DIMENSION_SETS_8D);
+    if dimension_set >= NUM_DIMENSION_SETS {
+        return Int8::zero();
+    }
 
     // Compute the Sobol sample with reversed bits.
     let vecs = &REV_VECTORS[dimension_set as usize];
@@ -192,5 +196,17 @@ mod tests {
     pub fn to_norm_f32() {
         assert_eq!(u32_to_f32_norm(0), 0.0);
         assert!(u32_to_f32_norm(core::u32::MAX) < 1.0);
+    }
+
+    #[test]
+    fn sobol_rev_out_of_range_returns_zero() {
+        assert_eq!(0, sobol_rev(1, NUM_DIMENSIONS));
+        assert_eq!(0, sobol_rev(12345, NUM_DIMENSIONS + 17));
+    }
+
+    #[test]
+    fn sobol_int8_rev_out_of_range_returns_zero_block() {
+        assert_eq!(Int8::zero(), sobol_int8_rev(1, NUM_DIMENSION_SETS));
+        assert_eq!(Int8::zero(), sobol_int8_rev(999, NUM_DIMENSION_SETS + 23));
     }
 }

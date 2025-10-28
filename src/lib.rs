@@ -62,11 +62,11 @@
 //! and over to create an arbitrarily high-dimensional sequence.  For example:
 //!
 //! ```rust
-//! # use sobol_burley::sample;
+//! # use sobol_burley::{sample, SIMD_WIDTH};
 //! // Print 10000 dimensions of a single sample.
 //! for dimension in 0..10000 {
-//!     let seed = dimension / 8;
-//!     let n = sample(0, dimension % 8, seed);
+//!     let seed = dimension / SIMD_WIDTH as u32;
+//!     let n = sample(0, dimension % SIMD_WIDTH as u32, seed);
 //!     println!("{}", n);
 //! }
 //!```
@@ -82,53 +82,52 @@
 //!
 //! # SIMD
 //!
-//! You can use `sample_8d()` to compute 8 dimensions at once, returned as
-//! an array of floats.
+//! You can use `sample_8d()` to compute [`SIMD_WIDTH`] dimensions at once,
+//! returned as an array of floats.
 //!
-//! On x86-64 architectures `sample_8d()` utilizes SIMD for a roughly 8x
-//! speed-up.  On other architectures it still computes correct results, but
-//! SIMD isn't supported yet.
+//! On targets with hardware vectors it may utilize SIMD for a large speed-up.
+//! On other architectures it still computes correct results.
 //!
 //! Importantly, `sample()` and `sample_8d()` always compute identical results:
 //!
 //! ```rust
-//! # use sobol_burley::{sample, sample_8d};
-//! for dimension_set in 0..10 {
-//!     let a = [
-//!         sample(0, dimension_set * 4, 0),
-//!         sample(0, dimension_set * 4 + 1, 0),
-//!         sample(0, dimension_set * 4 + 2, 0),
-//!         sample(0, dimension_set * 4 + 3, 0),
-//!         sample(0, dimension_set * 4 + 4, 0),
-//!         sample(0, dimension_set * 4 + 5, 0),
-//!         sample(0, dimension_set * 4 + 6, 0),
-//!         sample(0, dimension_set * 4 + 7, 0)
-//!     ];
-//!     let b = sample_8d(0, dimension_set, 0);
+//! # use sobol_burley::{sample, sample_8d, SIMD_WIDTH};
+//! for dimension_set in 0..3 {
+//!     let mut scalar = [0.0f32; SIMD_WIDTH];
+//!     for lane in 0..SIMD_WIDTH {
+//!         scalar[lane] = sample(0, dimension_set * SIMD_WIDTH as u32 + lane as u32, 0);
+//!     }
+//!     let vector = sample_8d(0, dimension_set, 0);
 //!
-//!     assert_eq!(a, b);
+//!     assert_eq!(scalar, vector);
 //! }
 //! ```
 //!
 //! The difference is only in performance and how the dimensions are indexed.
 
-#![no_std]
+#![cfg_attr(not(feature = "wgpu"), no_std)]
 #![allow(clippy::unreadable_literal)]
 
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+#[cfg(feature = "wgpu")]
+extern crate std;
 
+mod lane_block;
 pub mod parts;
-mod wide_32ix256;
+pub use lane_block::LaneBlock;
 
 // This `include` provides `NUM_DIMENSIONS` and `REV_VECTORS`.
 // See the build.rs file for how this included file is generated.
 include!(concat!(env!("OUT_DIR"), "/vectors.inc"));
+include!(concat!(env!("OUT_DIR"), "/vectors_flat.inc"));
 
-/// The number of available 4d dimension sets.
+/// Raw little-endian `u32` direction vectors laid out as
+/// `[NUM_DIMENSIONS][SOBOL_DEPTH]` for direct GPU uploads.
+pub const REV_VECTORS_BIN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vectors.bin"));
+
+/// The number of available dimension blocks of width [`SIMD_WIDTH`].
 ///
 /// This is just `NUM_DIMENSIONS / SIMD_WIDTH`, for convenience.
-pub const NUM_DIMENSION_SETS_8D: u32 = NUM_DIMENSIONS / SIMD_WIDTH as u32;
+pub const NUM_DIMENSION_SETS: u32 = NUM_DIMENSIONS / SIMD_WIDTH as u32;
 
 /// Compute one dimension of a single sample in the Sobol sequence.
 ///
@@ -143,15 +142,18 @@ pub const NUM_DIMENSION_SETS_8D: u32 = NUM_DIMENSIONS / SIMD_WIDTH as u32;
 ///
 /// Returns a number in the interval [0, 1).
 ///
-/// # Panics
+/// # Behavior on invalid input
 ///
-/// * Panics if `dimension` is greater than or equal to [`NUM_DIMENSIONS`].
-/// * In debug, panics if `sample_index` is greater than or equal to 2^32.
-///   In release, returns unspecified floats in the interval [0, 1).
+/// * If `dimension` is greater than or equal to [`NUM_DIMENSIONS`], the
+///   function returns `0.0`.
+/// * Passing a `sample_index` greater than or equal to 2^32 yields an
+///   unspecified value within [0, 1).
 #[inline]
 pub fn sample(sample_index: u32, dimension: u32, seed: u32) -> f32 {
     use parts::*;
-    debug_assert!(sample_index < 4_294_967_295);
+    if dimension >= NUM_DIMENSIONS {
+        return 0.0;
+    }
 
     // Shuffle the index using the given seed to produce a unique statistically
     // independent Sobol sequence.
@@ -181,26 +183,28 @@ pub fn sample(sample_index: u32, dimension: u32, seed: u32) -> f32 {
     u32_to_f32_norm(sobol_owen_rev.reverse_bits())
 }
 
-/// Compute 8 dimensions of a single sample in the Sobol sequence.
+/// Compute [`SIMD_WIDTH`] dimensions of a single sample in the Sobol sequence.
 ///
-/// This is identical to [`sample()`], but computes 8 dimensions at once.
-/// On x86-64 architectures it utilizes SIMD for a roughly 8x speed-up.
-/// On other architectures it still computes correct results, but doesn't
-/// utilize SIMD.
+/// This is identical to [`sample()`], but computes an entire SIMD-width block at
+/// once. On architectures with native vector support this can offer a
+/// significant speed-up, and on other targets it still produces correct
+/// results.
 ///
-/// `dimension_set` specifies which 8 dimensions to compute. `0` yields the
-/// first 8 dimensions, `1` the second 8 dimensions, and so on.
+/// `dimension_set` specifies which `SIMD_WIDTH` dimensions to compute.
+/// `0` yields the first block of dimensions, `1` the second block, and so on.
 ///
-/// # Panics
+/// # Behavior on invalid input
 ///
-/// * Panics if `dimension_set` is greater than or equal to
-///   [`NUM_DIMENSION_SETS_8D`].
-/// * In debug, panics if `sample_index` is greater than or equal to 2^32.
-///   In release, returns unspecified floats in the interval [0, 1).
+/// * If `dimension_set` is greater than or equal to [`NUM_DIMENSION_SETS`],
+///   the function returns an array of zeros.
+/// * Passing a `sample_index` greater than or equal to 2^32 yields an
+///   unspecified value within [0, 1).
 #[inline]
 pub fn sample_8d(sample_index: u32, dimension_set: u32, seed: u32) -> [f32; SIMD_WIDTH] {
     use parts::*;
-    debug_assert!(sample_index < 4_294_967_295);
+    if dimension_set >= NUM_DIMENSION_SETS {
+        return [0.0; SIMD_WIDTH];
+    }
 
     // Shuffle the index using the given seed to produce a unique statistically
     // independent Sobol sequence.
@@ -267,4 +271,22 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn sample_out_of_range_dimension_is_zero() {
+        assert_eq!(0.0, sample(0, NUM_DIMENSIONS, 0));
+        assert_eq!(0.0, sample(123, NUM_DIMENSIONS + 10, 42));
+    }
+
+    #[test]
+    fn sample_8d_out_of_range_dimension_set_is_zero() {
+        assert_eq!([0.0; SIMD_WIDTH], sample_8d(0, NUM_DIMENSION_SETS, 0));
+        assert_eq!(
+            [0.0; SIMD_WIDTH],
+            sample_8d(999, NUM_DIMENSION_SETS + 5, 17)
+        );
+    }
 }
+
+#[cfg(feature = "wgpu")]
+pub mod gpu;

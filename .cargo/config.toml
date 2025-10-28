@@ -1,3 +1,1 @@
-# enable avx2
-[build]
-rustflags = ["-C", "target-feature=+avx2"]
+## intentionally left empty; GPU build does not require custom rustflags

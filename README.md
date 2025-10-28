@@ -35,6 +35,50 @@ The first parameter of `sample()` is the index of the sample you want, and the s
 
 If all you want is a single Owen-scrambled Sobol sequence, then this is all you need.  For more advanced usage, see the crate documentation.
 
+## SIMD width and GPU targets
+
+This crate still exposes a `SIMD_WIDTH` constant that reflects how many
+dimensions are evaluated in lockstep when calling
+[`sample_8d`](https://docs.rs/sobol_burley/latest/sobol_burley/fn.sample_8d.html).
+On CPU targets the build script continues to emit the legacy eight-lane table in
+`REV_VECTORS`, but it now also writes a flat
+[`REV_VECTORS_FLAT`](https://docs.rs/sobol_burley/latest/sobol_burley/constant.REV_VECTORS_FLAT.html)
+array and a little-endian `vectors.bin` blob (also exposed at runtime as
+[`REV_VECTORS_BIN`](https://docs.rs/sobol_burley/latest/sobol_burley/constant.REV_VECTORS_BIN.html))
+that pack the reversed direction vectors as `[NUM_DIMENSIONS][32]`. These
+outputs are ideal for GPU upload—there is no need to re-shuffle or reverse bits
+at runtime.
+
+If you need a different lockstep width for CPU usage, adjust the `SIMD_WIDTH`
+constant near the top of `build.rs` and rebuild; both generated tables will be
+regenerated with the new layout. Just make sure the width cleanly divides the
+dimension count you plan to ship.
+
+Regardless of the chosen width, the scalar
+[`sample`](https://docs.rs/sobol_burley/latest/sobol_burley/fn.sample.html) API
+and the block API always agree—a property that is unit-tested—so you can freely
+mix them in CPU or GPU code without worrying about diverging sequences.
+
+### GPU compute with WGSL and `wgpu`
+
+The crate now ships a WGSL compute shader (`shaders/sobol.wgsl`) plus a host
+wrapper (`sobol_burley::gpu::SobolGpu`) that uploads the generated direction
+vectors from the `REV_VECTORS_BIN` blob and dispatches workloads through
+[`wgpu`](https://github.com/gfx-rs/wgpu). Everything lives in the primary crate—no
+separate rust-gpu crate or nightly toolchain is required.
+
+To see it in action, build the example with the `wgpu-example` feature so the
+optional dependencies are pulled in:
+
+```bash
+cargo run --example gpu_dispatch --features wgpu-example
+```
+
+The example requests push-constant support, uploads the baked direction
+vectors, and prints the first row of samples that came back from the GPU. You
+can use the same `SobolGpu` helper in your own code to integrate with an
+existing `wgpu` device and queue.
+
 ## Why Owen-scrambled Sobol?
 
 There are other resources that explain this properly and in-depth, including Brent Burley's paper linked above.  But here's the short version just to give some intuition:
@@ -53,9 +97,12 @@ But if you use Owen-scrambled Sobol, you get this:
 
 Random points have an uneven distribution, and plain Sobol exhibits a strong structure that can result in bias and artifacts.  But Owen-scrambled Sobol in some sense gets the best of both worlds: the even distribution of Sobol, but randomized to minimize structure.
 
-## Unsafe code
+## Safety
 
-This crate uses unsafe code for SIMD acceleration.  For 100% safe code, you can disable SIMD support via the `simd` feature flag (enabled by default).
+The public API is implemented entirely in safe Rust. Previous versions relied
+on AVX2 intrinsics behind a feature flag, but the current portable lane-block
+abstraction covers both CPU and GPU use-cases without requiring `unsafe`
+operations in the library.
 
 ## License
 

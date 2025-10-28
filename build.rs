@@ -1,8 +1,7 @@
 //! This file generates the Sobol direction vectors used by this crate's
 //! Sobol sequence.
 
-use itertools::izip;
-use std::{env, fs::File, io::Write, path::Path};
+use std::{fs::File, io::Write, path::Path};
 
 /// How many components to generate.
 const NUM_DIMENSIONS: usize = 21201;
@@ -13,72 +12,94 @@ const SIMD_WIDTH: usize = 8;
 const DIRECTION_NUMBERS_TEXT: &str = include_str!("direction_numbers/new-joe-kuo-6.21201.txt");
 
 fn main() {
-    let out_dir = env::var("OUT_DIR").unwrap();
+    let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR env var");
     let dest_path = Path::new(&out_dir).join("vectors.inc");
     let mut f = File::create(&dest_path).unwrap();
 
     // Init direction vectors.
     let vectors = generate_direction_vectors(NUM_DIMENSIONS);
 
-    // Write dimensions limit.
-    f.write_all(
-        format!(
-            "/// The number of available dimensions.\npub const NUM_DIMENSIONS: u32 = {};\n\n",
-            NUM_DIMENSIONS
-        )
-        .as_bytes(),
-    )
-    .unwrap();
-
-    // Write SIMD width.
-    f.write_all(
-        format!(
-            "/// The number of dimensions to generate at once when using SIMD.\npub const SIMD_WIDTH: usize = {};\n\n",
-            SIMD_WIDTH
-        )
-        .as_bytes(),
-    ).unwrap();
-
-    // Write the vectors.
-    // We write them in a rather atypical way because of how the library
-    // uses them.  First, we interleave the numbers of each set of 8
-    // dimensions, for SIMD evaluation.  Second, each number is written
-    // with reversed bits, to avoid needing to reverse them before scrambling.
-    f.write_all(
-        format!(
-            "const REV_VECTORS: &[[[u{0}; 8]; {1}]] = &[\n",
-            SOBOL_BITS, SOBOL_DEPTH
-        )
-        .as_bytes(),
-    )
-    .unwrap();
-    for d4 in vectors.chunks_exact(SIMD_WIDTH) {
-        f.write_all("  [\n".as_bytes()).unwrap();
-        for ((a, b), (c, d), (e, f1), (g, h)) in izip!(
-            d4[0].iter().zip(d4[1].iter()),
-            d4[2].iter().zip(d4[3].iter()),
-            d4[4].iter().zip(d4[5].iter()),
-            d4[6].iter().zip(d4[7].iter())
-        ) {
-            f.write_all(
-            format!(
-                "    [0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}, 0x{:08x}],\n",
-                a.reverse_bits(),
-                b.reverse_bits(),
-                c.reverse_bits(),
-                d.reverse_bits(),
-                e.reverse_bits(),
-                f1.reverse_bits(),
-                g.reverse_bits(),
-                h.reverse_bits(),
-                )
-                .as_bytes(),
-            )
-            .unwrap();
+    // Pre-compute reversed-bit variants once so we can materialize both the
+    // legacy block layout and the new flat GPU-friendly buffers without
+    // repeating work.
+    let mut rev_vectors_flat = Vec::with_capacity(NUM_DIMENSIONS);
+    for vec in &vectors {
+        let mut reversed = [0u32; SOBOL_DEPTH];
+        for (dst, &src) in reversed.iter_mut().zip(vec.iter()) {
+            *dst = src.reverse_bits();
         }
-        f.write_all("  ],\n".as_bytes()).unwrap();
+        rev_vectors_flat.push(reversed);
     }
-    f.write_all("];\n".as_bytes()).unwrap();
+
+    f.write_all(
+        format!(
+            concat!(
+                "/// The number of available dimensions.\n",
+                "pub const NUM_DIMENSIONS: u32 = {0};\n\n",
+                "/// The number of dimensions processed per block.\n",
+                "pub const SIMD_WIDTH: usize = {1};\n\n",
+                "/// The number of direction numbers per dimension.\n",
+                "pub const SOBOL_DEPTH: usize = {3};\n\n",
+                "const REV_VECTORS: &[[[u{2}; {4}]; {3}]] = &[\n"
+            ),
+            NUM_DIMENSIONS as u32, SIMD_WIDTH, SOBOL_BITS, SOBOL_DEPTH, SIMD_WIDTH
+        )
+        .as_bytes(),
+    )
+    .unwrap();
+    for chunk in rev_vectors_flat.chunks_exact(SIMD_WIDTH) {
+        f.write_all(b"  [\n").unwrap();
+        for depth_idx in 0..SOBOL_DEPTH {
+            let mut line = String::from("    [");
+            for (lane_idx, row) in chunk.iter().enumerate() {
+                line.push_str(&format!("0x{:08x}", row[depth_idx]));
+                if lane_idx + 1 != SIMD_WIDTH {
+                    line.push_str(", ");
+                }
+            }
+            line.push_str("],\n");
+            f.write_all(line.as_bytes()).unwrap();
+        }
+        f.write_all(b"  ],\n").unwrap();
+    }
+    f.write_all(b"];\n").unwrap();
+
+    // Emit a flat include!() file for host- or test-side usage where the GPU
+    // layout is more appropriate than the SIMD-interleaved structure.
+    let flat_inc_path = Path::new(&out_dir).join("vectors_flat.inc");
+    let mut flat_inc = File::create(&flat_inc_path).unwrap();
+    flat_inc
+        .write_all(
+            format!(
+                "/// Flat reversed-bit direction vectors laid out as \
+                 /// [NUM_DIMENSIONS][SOBOL_DEPTH].\n\
+                 pub const REV_VECTORS_FLAT: &[[u{0}; {1}]] = &[\n",
+                SOBOL_BITS, SOBOL_DEPTH
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    for row in &rev_vectors_flat {
+        let mut line = String::from("  [");
+        for (idx, value) in row.iter().enumerate() {
+            line.push_str(&format!("0x{:08x}", value));
+            if idx + 1 != SOBOL_DEPTH {
+                line.push_str(", ");
+            }
+        }
+        line.push_str("],\n");
+        flat_inc.write_all(line.as_bytes()).unwrap();
+    }
+    flat_inc.write_all(b"];\n").unwrap();
+
+    // Write a raw binary blob (little-endian u32) for direct upload via GPU
+    // APIs without requiring an include!() on the host side.
+    let mut bin = File::create(Path::new(&out_dir).join("vectors.bin")).unwrap();
+    for row in &rev_vectors_flat {
+        for value in row {
+            bin.write_all(&value.to_le_bytes()).unwrap();
+        }
+    }
 }
 
 //======================================================================

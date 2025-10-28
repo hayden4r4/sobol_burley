@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Removed the `sobol-gpu` rust-gpu crate, the `gpu-spirv-build` feature, and
+  the build-time SPIR-V toolchain dependency.
+- Added a WGSL compute shader (`shaders/sobol.wgsl`) and a
+  `sobol_burley::gpu::SobolGpu` helper that uploads the generated
+  `REV_VECTORS_BIN` data and dispatches work through `wgpu`.
+- Tweaked `build.rs` so the generated `vectors.inc` exposes `SOBOL_DEPTH`,
+  enabling the GPU module to share the same compile-time constants.
+- Updated `Cargo.toml`, the README, and the `gpu_dispatch` example to rely on
+  the new WGSL compute path via the `wgpu-example` feature.
+
 ## [0.7.0] - 2024-02-03
 
 -- Added support for AVX2 with 8 dimensions at a time.
