@@ -48,10 +48,8 @@ fn main() {
     // dimensions, for SIMD evaluation.  Second, each number is written
     // with reversed bits, to avoid needing to reverse them before scrambling.
     f.write_all(
-        format!(
-            "const REV_VECTORS: &[[[u{SOBOL_BITS}; {SOBOL_WIDTH}]; {SOBOL_DEPTH}]] = &[\n",
-        )
-        .as_bytes(),
+        format!("const REV_VECTORS: &[[[u{SOBOL_BITS}; {SOBOL_WIDTH}]; {SOBOL_DEPTH}]] = &[\n",)
+            .as_bytes(),
     )
     .unwrap();
     for d4 in vectors.chunks_exact(SOBOL_WIDTH) {
@@ -61,7 +59,8 @@ fn main() {
             for j in 0..SOBOL_WIDTH {
                 let value = d4[j][i].reverse_bits();
                 if j < SOBOL_WIDTH - 1 {
-                    f.write_all(format!("0x{:08x}, ", value).as_bytes()).unwrap();
+                    f.write_all(format!("0x{:08x}, ", value).as_bytes())
+                        .unwrap();
                 } else {
                     f.write_all(format!("0x{:08x}", value).as_bytes()).unwrap();
                 }

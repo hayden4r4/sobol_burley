@@ -178,8 +178,7 @@ pub fn sample(sample_index: u32, dimension: u32, seed: u32) -> f32 {
             .try_into()
             .unwrap();
 
-        ds ^ seed
-            ^ scramble_arr[dimension as usize & 0b111]
+        ds ^ seed ^ scramble_arr[dimension as usize & 0b111]
     };
 
     let sobol_owen_rev = owen_scramble_rev(sobol, hash(scramble));
